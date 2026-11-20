@@ -1,0 +1,9 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.AircraftWar" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- 启动窗口背景设为黑色，避免游戏启动时白屏闪烁 -->
+        <item name="android:windowBackground">@android:color/black</item>
+        <!-- Customize your dark theme here. -->
+        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+    </style>
+</resources>
