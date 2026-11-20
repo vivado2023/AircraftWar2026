@@ -3,22 +3,21 @@ package com.example.aircraftwar;
 import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsCompat;
 
+import com.example.aircraftwar.application.EasyGame;
+
+/**
+ * 程序入口：Windows 版 Main.java（JFrame + Mode 面板）迁移为 Activity。
+ * 默认使用简单模式（难度选择页面在实验三实现）。
+ *
+ * @author hitsz
+ */
 public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        WindowCompat.enableEdgeToEdge(getWindow());
-        setContentView(R.layout.activity_main);
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-            return insets;
-        });
+        // 默认使用简单模式
+        setContentView(new EasyGame(this));
     }
 }
