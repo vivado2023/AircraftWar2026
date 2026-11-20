@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
@@ -14,7 +15,12 @@ import com.example.aircraftwar.aircraft.BossEnemy;
 import com.example.aircraftwar.aircraft.HeroAircraft;
 import com.example.aircraftwar.basic.AbstractFlyingObject;
 import com.example.aircraftwar.bullet.BaseBullet;
+import com.example.aircraftwar.factory.BossEnemyFactory;
+import com.example.aircraftwar.observer.PropEffectSubject;
+import com.example.aircraftwar.prop.FirePowerManager;
+import com.example.aircraftwar.prop.PropEffectHandler;
 import com.example.aircraftwar.prop.Tool;
+import com.example.aircraftwar.prop.ToolFactory;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -25,14 +31,15 @@ import java.util.List;
  *   <li>实现 SurfaceHolder.Callback 与 Runnable，run() 中 lockCanvas → 绘制 → unlockCanvasAndPost；</li>
  *   <li>surfaceCreated 一次性加载并缓存图片，启动绘制线程；</li>
  *   <li>surfaceChanged 按真实屏幕尺寸换算缩放与偏移，不写死分辨率；</li>
- *   <li>surfaceDestroyed 置停止标志并等待线程结束。</li>
+ *   <li>surfaceDestroyed 置停止标志并等待线程结束；</li>
+ *   <li>触屏事件（onTouchEvent）替代 Windows 版 HeroController 的鼠标拖动。</li>
  * </ul>
- * 模板模式：固定主循环流程，简单/普通/困难三个子类只重写差异步骤。
- * 本步骤（游戏循环）先跑通“背景滚动 + 英雄机”的静止画面，触屏交互与游戏逻辑在步骤4接入。
+ * 模板模式：action() 固定游戏主循环骨架，简单/普通/困难三个子类只重写差异步骤。
  *
  * @author hitsz
  */
-public abstract class BaseGame extends SurfaceView implements SurfaceHolder.Callback, Runnable {
+public abstract class BaseGame extends SurfaceView
+        implements SurfaceHolder.Callback, Runnable, PropEffectHandler {
 
     private static final String TAG = "AircraftWar";
 
@@ -55,15 +62,22 @@ public abstract class BaseGame extends SurfaceView implements SurfaceHolder.Call
 
     protected int enemyMaxNumber = 5;
     protected double enemySpawnCycle = 20;
+    private int enemySpawnCounter = 0;
 
     protected double heroShootCycle = 15;
     protected double enemyShootCycle = 15;
+    private int heroShootCounter = 0;
+    private int enemyShootCounter = 0;
 
     protected double enemySpeedRate = 1.0;
     protected double enemyHpRate = 1.0;
     protected int bossHp = 300;
 
     protected int score = 0;
+    protected int nextBossScore = 200;
+
+    private int difficultyCounter = 0;
+    private boolean gameOverFlag = false;
 
     private final Paint paint = new Paint();
 
@@ -147,7 +161,10 @@ public abstract class BaseGame extends SurfaceView implements SurfaceHolder.Call
         while (isRunning) {
             long start = System.currentTimeMillis();
 
-            // 本步骤只负责「画」，逻辑在步骤4接入
+            if (!gameOverFlag) {
+                // 只负责「算」和「画」，不碰任何 UI 控件
+                action();
+            }
             drawFrame();
 
             long cost = System.currentTimeMillis() - start;
@@ -178,7 +195,19 @@ public abstract class BaseGame extends SurfaceView implements SurfaceHolder.Call
         }
     }
 
-    // ==================== 模板方法：子类重写差异步骤 ====================
+    // ==================== 模板方法：固定主循环流程 ====================
+
+    public final void action() {
+        enemySpawnAction();
+        shootAction();
+        bulletsMoveAction();
+        aircraftsMoveAction();
+        propsMoveAction();
+        crashCheckAction();
+        postProcessAction();
+        difficultyIncreaseAction();
+        checkResultAction();
+    }
 
     protected abstract Bitmap getBackgroundImage();
 
@@ -192,6 +221,42 @@ public abstract class BaseGame extends SurfaceView implements SurfaceHolder.Call
 
     protected abstract void increaseDifficulty();
 
+    // ==================== 生成 / 射击 / 移动 ====================
+
+    private void enemySpawnAction() {
+        enemySpawnCounter++;
+
+        if (enemySpawnCounter < enemySpawnCycle) {
+            return;
+        }
+
+        enemySpawnCounter = 0;
+
+        if (enemyAircrafts.size() < enemyMaxNumber) {
+            int x = (int) (Math.random() * (GameConfig.WINDOW_WIDTH - ImageManager.MOB_ENEMY_IMAGE.getWidth()));
+            int y = (int) (Math.random() * GameConfig.WINDOW_HEIGHT * 0.05);
+            enemyAircrafts.add(createEnemy(x, y));
+        }
+
+        if (canGenerateBoss() && score >= nextBossScore && !bossExists()) {
+            BossEnemy bossEnemy = (BossEnemy) new BossEnemyFactory().createEnemy(
+                    GameConfig.WINDOW_WIDTH / 2,
+                    50,
+                    3,
+                    0,
+                    bossHp
+            );
+
+            enemyAircrafts.add(bossEnemy);
+
+            onBossGenerated(bossEnemy);
+
+            nextBossScore += 200;
+
+            Log.d(TAG, "Boss 敌机生成，血量=" + bossHp);
+        }
+    }
+
     protected int scaleSpeed(int speed) {
         int scaled = (int) Math.round(speed * enemySpeedRate);
 
@@ -204,6 +269,226 @@ public abstract class BaseGame extends SurfaceView implements SurfaceHolder.Call
 
     protected int scaleHp(int hp) {
         return Math.max(1, (int) Math.round(hp * enemyHpRate));
+    }
+
+    private void difficultyIncreaseAction() {
+        difficultyCounter++;
+
+        if (difficultyCounter >= 500) {
+            difficultyCounter = 0;
+            increaseDifficulty();
+        }
+    }
+
+    private void shootAction() {
+        heroShootCounter++;
+
+        if (heroShootCounter >= heroShootCycle) {
+            heroShootCounter = 0;
+            heroBullets.addAll(heroAircraft.shoot());
+        }
+
+        enemyShootCounter++;
+
+        if (enemyShootCounter >= enemyShootCycle) {
+            enemyShootCounter = 0;
+
+            for (AbstractAircraft enemy : enemyAircrafts) {
+                enemyBullets.addAll(enemy.shoot());
+            }
+        }
+    }
+
+    private void bulletsMoveAction() {
+        for (BaseBullet bullet : heroBullets) {
+            bullet.forward();
+        }
+
+        for (BaseBullet bullet : enemyBullets) {
+            bullet.forward();
+        }
+    }
+
+    private void aircraftsMoveAction() {
+        for (AbstractAircraft enemyAircraft : enemyAircrafts) {
+            enemyAircraft.forward();
+        }
+    }
+
+    private void propsMoveAction() {
+        for (Tool prop : props) {
+            prop.forward();
+        }
+    }
+
+    private boolean bossExists() {
+        for (AbstractAircraft enemy : enemyAircrafts) {
+            if (enemy instanceof BossEnemy && !enemy.notValid()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ==================== 道具效果（观察者模式，PropEffectHandler 实现） ====================
+
+    /**
+     * 观察者模式：炸弹道具触发后，通知所有敌机和敌方子弹。
+     */
+    @Override
+    public void activateBomb() {
+        PropEffectSubject subject = new PropEffectSubject();
+
+        for (AbstractAircraft enemy : enemyAircrafts) {
+            subject.addObserver(enemy);
+        }
+
+        for (BaseBullet bullet : enemyBullets) {
+            subject.addObserver(bullet);
+        }
+
+        int beforeKilled = countInvalidEnemies();
+
+        subject.notifyBomb();
+
+        int afterKilled = countInvalidEnemies();
+
+        int killedByBomb = Math.max(0, afterKilled - beforeKilled);
+
+        score += killedByBomb * 10;
+
+        Log.d(TAG, "炸弹道具生效，击毁敌机数量：" + killedByBomb
+                + "，获得分数：" + (killedByBomb * 10));
+    }
+
+    /**
+     * 观察者模式：冰冻道具触发后，通知所有敌机和敌方子弹。
+     */
+    @Override
+    public void activateFreeze() {
+        PropEffectSubject subject = new PropEffectSubject();
+
+        for (AbstractAircraft enemy : enemyAircrafts) {
+            subject.addObserver(enemy);
+        }
+
+        for (BaseBullet bullet : enemyBullets) {
+            subject.addObserver(bullet);
+        }
+
+        subject.notifyFreeze();
+
+        Log.d(TAG, "冰冻道具生效，已通知所有可响应对象");
+    }
+
+    private int countInvalidEnemies() {
+        int count = 0;
+
+        for (AbstractAircraft enemy : enemyAircrafts) {
+            if (enemy.notValid()) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    // ==================== 碰撞检测 ====================
+
+    private void crashCheckAction() {
+        for (BaseBullet bullet : enemyBullets) {
+            if (bullet.notValid()) {
+                continue;
+            }
+
+            if (heroAircraft.crash(bullet)) {
+                heroAircraft.decreaseHp(bullet.getPower());
+                bullet.vanish();
+            }
+        }
+
+        for (BaseBullet bullet : heroBullets) {
+            if (bullet.notValid()) {
+                continue;
+            }
+
+            for (AbstractAircraft enemyAircraft : enemyAircrafts) {
+                if (enemyAircraft.notValid()) {
+                    continue;
+                }
+
+                if (enemyAircraft.crash(bullet)) {
+                    enemyAircraft.decreaseHp(bullet.getPower());
+                    bullet.vanish();
+
+                    if (enemyAircraft.notValid()) {
+                        score += 10;
+                        dropPropsAfterKilled(enemyAircraft);
+                    }
+                }
+
+                if (!enemyAircraft.notValid()
+                        && (enemyAircraft.crash(heroAircraft) || heroAircraft.crash(enemyAircraft))) {
+
+                    enemyAircraft.vanish();
+                    heroAircraft.decreaseHp(Integer.MAX_VALUE);
+                }
+            }
+        }
+
+        for (Tool prop : props) {
+            if (prop.notValid()) {
+                continue;
+            }
+
+            if (heroAircraft.crash(prop)) {
+                prop.activate(heroAircraft, this);
+                prop.vanish();
+            }
+        }
+    }
+
+    private void dropPropsAfterKilled(AbstractAircraft enemyAircraft) {
+        if (enemyAircraft instanceof BossEnemy) {
+            for (int i = 0; i < 3; i++) {
+                int typeCount = 5;
+
+                Tool prop = ToolFactory.createTool(
+                        enemyAircraft.getLocationX() + (i - 1) * 40,
+                        enemyAircraft.getLocationY(),
+                        typeCount
+                );
+
+                if (prop != null) {
+                    props.add(prop);
+                }
+            }
+        } else {
+            Tool prop = enemyAircraft.dropProp();
+
+            if (prop != null) {
+                props.add(prop);
+            }
+        }
+    }
+
+    private void postProcessAction() {
+        enemyBullets.removeIf(AbstractFlyingObject::notValid);
+        heroBullets.removeIf(AbstractFlyingObject::notValid);
+        enemyAircrafts.removeIf(AbstractFlyingObject::notValid);
+        props.removeIf(AbstractFlyingObject::notValid);
+    }
+
+    private void checkResultAction() {
+        if (heroAircraft.getHp() <= 0 && !gameOverFlag) {
+            gameOverFlag = true;
+
+            FirePowerManager.shutdown();
+
+            Log.d(TAG, "Game Over! 最终得分: " + score);
+            // 实验三：通过 Handler/Message 切回主线程，跳转排行榜与输入姓名页面
+        }
     }
 
     // ==================== 绘制 ====================
@@ -243,6 +528,10 @@ public abstract class BaseGame extends SurfaceView implements SurfaceHolder.Call
 
         paintScoreAndLife(canvas);
 
+        if (gameOverFlag) {
+            paintGameOver(canvas);
+        }
+
         canvas.restore();
     }
 
@@ -274,5 +563,41 @@ public abstract class BaseGame extends SurfaceView implements SurfaceHolder.Call
 
         canvas.drawText("SCORE: " + this.score, 10, 25, paint);
         canvas.drawText("LIFE: " + this.heroAircraft.getHp(), 10, 47, paint);
+    }
+
+    private void paintGameOver(Canvas canvas) {
+        paint.setColor(Color.YELLOW);
+        paint.setTextSize(48);
+
+        String msg = "GAME OVER  score=" + score;
+        canvas.drawText(
+                msg,
+                (GameConfig.WINDOW_WIDTH - paint.measureText(msg)) / 2f,
+                GameConfig.WINDOW_HEIGHT / 2f,
+                paint
+        );
+    }
+
+    // ==================== 触屏：替代 Windows 版 HeroController ====================
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        int action = event.getAction();
+
+        if (action == MotionEvent.ACTION_MOVE || action == MotionEvent.ACTION_DOWN) {
+            // 屏幕像素 -> 逻辑坐标
+            int x = (int) ((event.getX() - GameConfig.OFFSET_X) / GameConfig.SCALE);
+            int y = (int) ((event.getY() - GameConfig.OFFSET_Y) / GameConfig.SCALE);
+
+            if (x < 0 || x > GameConfig.WINDOW_WIDTH || y < 0 || y > GameConfig.WINDOW_HEIGHT) {
+                // 防止超出边界（与 Windows 版 HeroController 一致）
+                return true;
+            }
+
+            heroAircraft.setLocation(x, y);
+            return true;
+        }
+
+        return super.onTouchEvent(event);
     }
 }
