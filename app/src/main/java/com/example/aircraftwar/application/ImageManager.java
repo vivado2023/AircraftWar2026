@@ -64,6 +64,16 @@ public class ImageManager {
     /**
      * 加载并缓存全部图片。使用 applicationContext 避免持有 Activity 导致内存泄漏。
      */
+
+    private static Bitmap loadGameBitmap(Context context, int resId) {
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inScaled = false;
+
+        Bitmap bitmap = BitmapFactory.decodeResource(
+                context.getResources(), resId, options);
+        bitmap.setDensity(Bitmap.DENSITY_NONE);
+        return bitmap;
+    }
     public static synchronized void init(Context context) {
         if (initialized) {
             return;
@@ -71,23 +81,23 @@ public class ImageManager {
 
         Context appContext = context.getApplicationContext();
 
-        BACKGROUND_EASY_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.bg2);
-        BACKGROUND_NORMAL_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.bg);
-        BACKGROUND_HARD_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.bg3);
+        BACKGROUND_EASY_IMAGE = loadGameBitmap(appContext, R.drawable.bg2);
+        BACKGROUND_NORMAL_IMAGE = loadGameBitmap(appContext, R.drawable.bg);
+        BACKGROUND_HARD_IMAGE = loadGameBitmap(appContext, R.drawable.bg3);
 
-        HERO_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.hero);
-        MOB_ENEMY_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.mob);
-        ELITE_ENEMY_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.elite);
-        ADVANCED_ENEMY_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.elite_plus);
-        ACE_ENEMY_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.elite_pro);
-        BOSS_ENEMY_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.boss);
-        HERO_BULLET_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.bullet_hero);
-        ENEMY_BULLET_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.bullet_enemy);
-        HP_PROP_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.prop_blood);
-        FIRE_PROP_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.prop_bullet);
-        STRONG_FIRE_PROP_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.prop_bullet_plus);
-        BOOM_PROP_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.prop_bomb);
-        FROZE_PROP_IMAGE = BitmapFactory.decodeResource(appContext.getResources(), R.drawable.prop_freeze);
+        HERO_IMAGE = loadGameBitmap(appContext, R.drawable.hero);
+        MOB_ENEMY_IMAGE = loadGameBitmap(appContext, R.drawable.mob);
+        ELITE_ENEMY_IMAGE = loadGameBitmap(appContext, R.drawable.elite);
+        ADVANCED_ENEMY_IMAGE = loadGameBitmap(appContext, R.drawable.elite_plus);
+        ACE_ENEMY_IMAGE = loadGameBitmap(appContext, R.drawable.elite_pro);
+        BOSS_ENEMY_IMAGE = loadGameBitmap(appContext, R.drawable.boss);
+        HERO_BULLET_IMAGE = loadGameBitmap(appContext, R.drawable.bullet_hero);
+        ENEMY_BULLET_IMAGE = loadGameBitmap(appContext, R.drawable.bullet_enemy);
+        HP_PROP_IMAGE = loadGameBitmap(appContext, R.drawable.prop_blood);
+        FIRE_PROP_IMAGE = loadGameBitmap(appContext, R.drawable.prop_bullet);
+        STRONG_FIRE_PROP_IMAGE = loadGameBitmap(appContext, R.drawable.prop_bullet_plus);
+        BOOM_PROP_IMAGE = loadGameBitmap(appContext, R.drawable.prop_bomb);
+        FROZE_PROP_IMAGE = loadGameBitmap(appContext, R.drawable.prop_freeze);
 
         CLASSNAME_IMAGE_MAP.put(HeroAircraft.class.getName(), HERO_IMAGE);
         CLASSNAME_IMAGE_MAP.put(MobEnemy.class.getName(), MOB_ENEMY_IMAGE);

@@ -1,23 +1,31 @@
 package com.example.aircraftwar;
 
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SwitchCompat;
 
-import com.example.aircraftwar.application.EasyGame;
-
-/**
- * 程序入口：Windows 版 Main.java（JFrame + Mode 面板）迁移为 Activity。
- * 默认使用简单模式（难度选择页面在实验三实现）。
- *
- * @author hitsz
- */
 public class MainActivity extends AppCompatActivity {
+
+    private SwitchCompat audioSwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // 默认使用简单模式
-        setContentView(new EasyGame(this));
+        setContentView(R.layout.activity_main);
+
+        audioSwitch = findViewById(R.id.switch_audio);
+
+        findViewById(R.id.btn_easy).setOnClickListener(view -> openGame(0));
+        findViewById(R.id.btn_normal).setOnClickListener(view -> openGame(1));
+        findViewById(R.id.btn_hard).setOnClickListener(view -> openGame(2));
+    }
+
+    private void openGame(int difficulty) {
+        Intent intent = new Intent(this, GameActivity.class);
+        intent.putExtra(GameActivity.EXTRA_DIFFICULTY, difficulty);
+        intent.putExtra(GameActivity.EXTRA_AUDIO_ENABLED, audioSwitch.isChecked());
+        startActivity(intent);
     }
 }

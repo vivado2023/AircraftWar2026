@@ -18,8 +18,8 @@ import com.example.aircraftwar.bullet.BaseBullet;
 import com.example.aircraftwar.factory.BossEnemyFactory;
 import com.example.aircraftwar.observer.PropEffectSubject;
 import com.example.aircraftwar.prop.FirePowerManager;
-import com.example.aircraftwar.prop.PropEffectHandler;
 import com.example.aircraftwar.prop.Tool;
+import com.example.aircraftwar.prop.PropEffectHandler;
 import com.example.aircraftwar.prop.ToolFactory;
 
 import java.util.LinkedList;
@@ -38,8 +38,28 @@ import java.util.List;
  *
  * @author hitsz
  */
-public abstract class BaseGame extends SurfaceView
-        implements SurfaceHolder.Callback, Runnable, PropEffectHandler {
+public abstract class BaseGame extends SurfaceView implements SurfaceHolder.Callback, Runnable, PropEffectHandler {
+    public enum GameEvent {
+        BULLET_HIT, BOMB, SUPPLY, BOSS_STARTED, BOSS_ENDED, GAME_OVER
+    }
+
+    public interface EventListener {
+        void onGameEvent(GameEvent event, int score);
+    }
+
+    private volatile EventListener eventListener;
+    private boolean bossActiveLastFrame;
+
+    public void setEventListener(EventListener listener) {
+        eventListener = listener;
+    }
+
+    private void reportEvent(GameEvent event) {
+        EventListener listener = eventListener;
+        if (listener != null) {
+            listener.onGameEvent(event, score);
+        }
+    }
 
     private static final String TAG = "AircraftWar";
 
@@ -101,41 +121,36 @@ public abstract class BaseGame extends SurfaceView
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        // 坑：图片在 surfaceCreated 里一次性 decode 并缓存，循环中只做绘制
         ImageManager.init(getContext().getApplicationContext());
-
-        // 英雄机初始位置：底部居中（Windows 版在 Game 构造器中完成，
-        // Android 移到 surfaceCreated，因为此时图片才可用）
-        heroAircraft.init(
-                GameConfig.WINDOW_WIDTH / 2,
-                GameConfig.WINDOW_HEIGHT - ImageManager.HERO_IMAGE.getHeight(),
-                0,
-                0,
-                300,
-                300
-        );
-
-        backgroundImage = getBackgroundImage();
-        initDifficultyParameters();
-
-        isRunning = true;
-        drawThread = new Thread(this, "game-draw-thread");
-        drawThread.start();
-        Log.d(TAG, "surfaceCreated: 图片加载完成，绘制线程已启动");
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        // 坑：不写死分辨率——按真实屏幕尺寸等比缩放并居中（letterbox）
-        float scaleX = width / (float) GameConfig.WINDOW_WIDTH;
-        float scaleY = height / (float) GameConfig.WINDOW_HEIGHT;
-        GameConfig.SCALE = Math.min(scaleX, scaleY);
-        GameConfig.OFFSET_X = (width - GameConfig.WINDOW_WIDTH * GameConfig.SCALE) / 2f;
-        GameConfig.OFFSET_Y = (height - GameConfig.WINDOW_HEIGHT * GameConfig.SCALE) / 2f;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
 
-        Log.d(TAG, "surfaceChanged: width=" + width + ", height=" + height
-                + ", scale=" + GameConfig.SCALE
-                + ", offset=(" + GameConfig.OFFSET_X + "," + GameConfig.OFFSET_Y + ")");
+        float scale = width / (float) GameConfig.WINDOW_WIDTH;
+        GameConfig.SCALE = scale;
+        GameConfig.WINDOW_HEIGHT = (int) Math.ceil(height / (double) scale);
+        GameConfig.OFFSET_X = 0f;
+        GameConfig.OFFSET_Y = 0f;
+
+        if (backgroundImage == null) {
+            heroAircraft.init(
+                    GameConfig.WINDOW_WIDTH / 2,
+                    GameConfig.WINDOW_HEIGHT - ImageManager.HERO_IMAGE.getHeight(),
+                    0, 0, 300, 300
+            );
+            backgroundImage = getBackgroundImage();
+            initDifficultyParameters();
+        }
+
+        if (drawThread == null) {
+            isRunning = true;
+            drawThread = new Thread(this, "game-draw-thread");
+            drawThread.start();
+        }
     }
 
     @Override
@@ -207,6 +222,14 @@ public abstract class BaseGame extends SurfaceView
         postProcessAction();
         difficultyIncreaseAction();
         checkResultAction();
+
+        if (!gameOverFlag) {
+            boolean bossActive = bossExists();
+            if (bossActive != bossActiveLastFrame) {
+                bossActiveLastFrame = bossActive;
+                reportEvent(bossActive ? GameEvent.BOSS_STARTED : GameEvent.BOSS_ENDED);
+            }
+        }
     }
 
     protected abstract Bitmap getBackgroundImage();
@@ -331,12 +354,11 @@ public abstract class BaseGame extends SurfaceView
         return false;
     }
 
-    // ==================== 道具效果（观察者模式，PropEffectHandler 实现） ====================
+    // ==================== 道具效果（观察者模式） ====================
 
     /**
      * 观察者模式：炸弹道具触发后，通知所有敌机和敌方子弹。
      */
-    @Override
     public void activateBomb() {
         PropEffectSubject subject = new PropEffectSubject();
 
@@ -365,7 +387,6 @@ public abstract class BaseGame extends SurfaceView
     /**
      * 观察者模式：冰冻道具触发后，通知所有敌机和敌方子弹。
      */
-    @Override
     public void activateFreeze() {
         PropEffectSubject subject = new PropEffectSubject();
 
@@ -405,6 +426,7 @@ public abstract class BaseGame extends SurfaceView
             if (heroAircraft.crash(bullet)) {
                 heroAircraft.decreaseHp(bullet.getPower());
                 bullet.vanish();
+                reportEvent(GameEvent.BULLET_HIT);
             }
         }
 
@@ -421,6 +443,7 @@ public abstract class BaseGame extends SurfaceView
                 if (enemyAircraft.crash(bullet)) {
                     enemyAircraft.decreaseHp(bullet.getPower());
                     bullet.vanish();
+                    reportEvent(GameEvent.BULLET_HIT);
 
                     if (enemyAircraft.notValid()) {
                         score += 10;
@@ -429,8 +452,8 @@ public abstract class BaseGame extends SurfaceView
                 }
 
                 if (!enemyAircraft.notValid()
-                        && (enemyAircraft.crash(heroAircraft) || heroAircraft.crash(enemyAircraft))) {
-
+                        && (enemyAircraft.crash(heroAircraft)
+                        || heroAircraft.crash(enemyAircraft))) {
                     enemyAircraft.vanish();
                     heroAircraft.decreaseHp(Integer.MAX_VALUE);
                 }
@@ -445,6 +468,12 @@ public abstract class BaseGame extends SurfaceView
             if (heroAircraft.crash(prop)) {
                 prop.activate(heroAircraft, this);
                 prop.vanish();
+
+                if (prop instanceof com.example.aircraftwar.prop.BoomTool) {
+                    reportEvent(GameEvent.BOMB);
+                } else {
+                    reportEvent(GameEvent.SUPPLY);
+                }
             }
         }
     }
@@ -487,6 +516,7 @@ public abstract class BaseGame extends SurfaceView
             FirePowerManager.shutdown();
 
             Log.d(TAG, "Game Over! 最终得分: " + score);
+            reportEvent(GameEvent.GAME_OVER);
             // 实验三：通过 Handler/Message 切回主线程，跳转排行榜与输入姓名页面
         }
     }
@@ -505,14 +535,15 @@ public abstract class BaseGame extends SurfaceView
         canvas.clipRect(0, 0, GameConfig.WINDOW_WIDTH, GameConfig.WINDOW_HEIGHT);
 
         // 背景滚动：两张图首尾相接向下滚动
-        canvas.drawBitmap(backgroundImage, 0, this.backGroundTop - GameConfig.WINDOW_HEIGHT, paint);
-        canvas.drawBitmap(backgroundImage, 0, this.backGroundTop, paint);
+        int tileHeight = backgroundImage.getHeight();
 
-        this.backGroundTop += 1;
-
-        if (this.backGroundTop >= GameConfig.WINDOW_HEIGHT) {
-            this.backGroundTop = 0;
+        for (int y = backGroundTop - tileHeight;
+             y < GameConfig.WINDOW_HEIGHT;
+             y += tileHeight) {
+            canvas.drawBitmap(backgroundImage, 0f, y, paint);
         }
+
+        backGroundTop = (backGroundTop + 1) % tileHeight;
 
         paintImageWithPositionRevised(canvas, enemyBullets);
         paintImageWithPositionRevised(canvas, heroBullets);
