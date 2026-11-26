@@ -14,6 +14,34 @@
         android:textSize="24sp"
         android:textStyle="bold" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_easy"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="简单" />
+
+        <Button
+            android:id="@+id/btn_normal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="普通" />
+
+        <Button
+            android:id="@+id/btn_hard"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="困难" />
+    </LinearLayout>
+
     <ListView
         android:id="@+id/lv_rank"
         android:layout_width="match_parent"

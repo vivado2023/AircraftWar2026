@@ -13,6 +13,7 @@ import java.util.List;
  * SQLite 数据库存储实现：与文件实现对外提供同一套 RankingDao 接口，
  * 页面与 Adapter 无需改动（面向接口编程，见 RankingDaoFactory）。
  * <p>
+ * 三个难度的记录存在同一张 rank 表，用 difficulty 列区分；
  * 数据库文件位于应用沙箱 databases/rank.db，默认私有。
  *
  * @author hitsz
@@ -26,15 +27,15 @@ public class RankingDaoSqliteImpl implements RankingDao {
     }
 
     @Override
-    public List<ScoreRecord> getAllRecords() {
+    public List<ScoreRecord> getAllRecords(int difficulty) {
         List<ScoreRecord> records = new ArrayList<>();
 
         SQLiteDatabase db = helper.getReadableDatabase();
         Cursor cursor = db.query(
                 RankDbHelper.TABLE_NAME,
                 null,
-                null,
-                null,
+                RankDbHelper.COL_DIFFICULTY + "=?",
+                new String[]{String.valueOf(difficulty)},
                 null,
                 null,
                 RankDbHelper.COL_SCORE + " DESC, " + RankDbHelper.COL_ID + " DESC"
@@ -45,7 +46,7 @@ public class RankingDaoSqliteImpl implements RankingDao {
             String name = cursor.getString(cursor.getColumnIndexOrThrow(RankDbHelper.COL_NAME));
             int score = cursor.getInt(cursor.getColumnIndexOrThrow(RankDbHelper.COL_SCORE));
             String time = cursor.getString(cursor.getColumnIndexOrThrow(RankDbHelper.COL_TIME));
-            records.add(new ScoreRecord(id, name, score, time));
+            records.add(new ScoreRecord(id, difficulty, name, score, time));
         }
 
         // 遍历取值后必须 close()
@@ -56,6 +57,7 @@ public class RankingDaoSqliteImpl implements RankingDao {
     @Override
     public void addRecord(ScoreRecord record) {
         ContentValues values = new ContentValues();
+        values.put(RankDbHelper.COL_DIFFICULTY, record.getDifficulty());
         values.put(RankDbHelper.COL_NAME, record.getPlayerName());
         values.put(RankDbHelper.COL_SCORE, record.getScore());
         values.put(RankDbHelper.COL_TIME, record.getTime());
@@ -92,9 +94,13 @@ public class RankingDaoSqliteImpl implements RankingDao {
     public static class RankDbHelper extends SQLiteOpenHelper {
 
         static final String DB_NAME = "rank.db";
-        static final int DB_VERSION = 1;
+
+        /** v2：新增 difficulty 列，区分三个难度的排行榜 */
+        static final int DB_VERSION = 2;
+
         static final String TABLE_NAME = "rank";
         static final String COL_ID = "_id";
+        static final String COL_DIFFICULTY = "difficulty";
         static final String COL_NAME = "name";
         static final String COL_SCORE = "score";
         static final String COL_TIME = "time";
@@ -108,6 +114,7 @@ public class RankingDaoSqliteImpl implements RankingDao {
         public void onCreate(SQLiteDatabase db) {
             String sql = "CREATE TABLE " + TABLE_NAME + " ("
                     + COL_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + COL_DIFFICULTY + " INTEGER, "
                     + COL_NAME + " TEXT, "
                     + COL_SCORE + " INTEGER, "
                     + COL_TIME + " TEXT)";

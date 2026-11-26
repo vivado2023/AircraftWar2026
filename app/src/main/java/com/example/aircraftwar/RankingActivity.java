@@ -1,6 +1,7 @@
 package com.example.aircraftwar;
 
 import android.app.AlertDialog;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -23,6 +24,7 @@ import java.util.List;
 /**
  * 排行榜页面（实验四）：
  * <ul>
+ *   <li>简单/普通/困难三个难度各有独立榜单，顶部按钮切换；</li>
  *   <li>ListView 纵向排列记录，第一名高亮显示；</li>
  *   <li>自定义 BaseAdapter（视图复用 + ViewHolder）管理数据，notifyDataSetChanged 刷新视图；</li>
  *   <li>点击行末删除按钮，同步移除数据源并刷新列表；</li>
@@ -33,8 +35,16 @@ import java.util.List;
  */
 public class RankingActivity extends AppCompatActivity {
 
+    /** 从游戏结算跳转时携带的难度（默认简单） */
+    public static final String EXTRA_DIFFICULTY = "difficulty";
+
     private RankingService rankingService;
     private RankAdapter adapter;
+
+    private int currentDifficulty = ScoreRecord.DIFFICULTY_EASY;
+    private Button btnEasy;
+    private Button btnNormal;
+    private Button btnHard;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,22 +53,65 @@ public class RankingActivity extends AppCompatActivity {
 
         rankingService = new RankingService(this);
 
+        btnEasy = findViewById(R.id.btn_easy);
+        btnNormal = findViewById(R.id.btn_normal);
+        btnHard = findViewById(R.id.btn_hard);
+
+        btnEasy.setOnClickListener(v -> switchDifficulty(ScoreRecord.DIFFICULTY_EASY));
+        btnNormal.setOnClickListener(v -> switchDifficulty(ScoreRecord.DIFFICULTY_NORMAL));
+        btnHard.setOnClickListener(v -> switchDifficulty(ScoreRecord.DIFFICULTY_HARD));
+
         // 找到 ListView -> 初始化数据源 -> 创建 Adapter -> 绑定到 ListView
         ListView listView = findViewById(R.id.lv_rank);
-        adapter = new RankAdapter(rankingService.getRankingList());
+        adapter = new RankAdapter();
         listView.setAdapter(adapter);
         listView.setEmptyView(findViewById(R.id.tv_empty));
 
         findViewById(R.id.btn_add).setOnClickListener(view -> showAddDialog());
+
+        // 从游戏结算跳转时，直接展示对应难度的榜单
+        int difficulty = getIntent().getIntExtra(EXTRA_DIFFICULTY, ScoreRecord.DIFFICULTY_EASY);
+        switchDifficulty(difficulty);
+    }
+
+    /** 切换当前难度榜单：更新按钮选中样式并刷新列表 */
+    private void switchDifficulty(int difficulty) {
+        currentDifficulty = difficulty;
+
+        int gold = ContextCompat.getColor(this, R.color.gold);
+        int white = ContextCompat.getColor(this, R.color.white);
+
+        styleModeButton(btnEasy, difficulty == ScoreRecord.DIFFICULTY_EASY, gold, white);
+        styleModeButton(btnNormal, difficulty == ScoreRecord.DIFFICULTY_NORMAL, gold, white);
+        styleModeButton(btnHard, difficulty == ScoreRecord.DIFFICULTY_HARD, gold, white);
+
+        refresh();
+    }
+
+    private void styleModeButton(Button button, boolean selected, int gold, int white) {
+        button.setTextColor(selected ? gold : white);
+        button.setTypeface(null, selected ? Typeface.BOLD : Typeface.NORMAL);
     }
 
     /** 数据变化后重新拉取数据源并通知列表刷新 */
     private void refresh() {
-        adapter.setRecords(rankingService.getRankingList());
+        adapter.setRecords(rankingService.getRankingList(currentDifficulty));
         adapter.notifyDataSetChanged();
     }
 
-    /** “＋ 添加记录”对话框：手动输入姓名与分数 */
+    private static String difficultyName(int difficulty) {
+        switch (difficulty) {
+            case ScoreRecord.DIFFICULTY_NORMAL:
+                return "普通模式";
+            case ScoreRecord.DIFFICULTY_HARD:
+                return "困难模式";
+            case ScoreRecord.DIFFICULTY_EASY:
+            default:
+                return "简单模式";
+        }
+    }
+
+    /** “＋ 添加记录”对话框：手动输入姓名与分数，计入当前难度榜单 */
     private void showAddDialog() {
         EditText nameInput = new EditText(this);
         nameInput.setHint("玩家姓名");
@@ -76,7 +129,7 @@ public class RankingActivity extends AppCompatActivity {
         container.addView(scoreInput);
 
         new AlertDialog.Builder(this)
-                .setTitle("添加记录")
+                .setTitle("添加记录（" + difficultyName(currentDifficulty) + "）")
                 .setView(container)
                 .setPositiveButton("添加", (dialog, which) -> {
                     String name = nameInput.getText().toString().trim();
@@ -91,7 +144,7 @@ public class RankingActivity extends AppCompatActivity {
                         } catch (NumberFormatException ignored) {
                         }
                     }
-                    rankingService.addScore(name, score);
+                    rankingService.addScore(currentDifficulty, name, score);
                     refresh();
                 })
                 .setNegativeButton("取消", null)
@@ -101,11 +154,7 @@ public class RankingActivity extends AppCompatActivity {
     /** 自定义适配器：继承 BaseAdapter，重写 4 个抽象方法 */
     private class RankAdapter extends BaseAdapter {
 
-        private List<ScoreRecord> records;
-
-        RankAdapter(List<ScoreRecord> records) {
-            this.records = records;
-        }
+        private List<ScoreRecord> records = List.of();
 
         void setRecords(List<ScoreRecord> records) {
             this.records = records;
@@ -175,7 +224,7 @@ public class RankingActivity extends AppCompatActivity {
             tvRank.setTextColor(isTop ? gold : white);
             tvName.setTextColor(isTop ? gold : white);
             tvScore.setTextColor(isTop ? gold : white);
-            tvRank.setTypeface(null, isTop ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            tvRank.setTypeface(null, isTop ? Typeface.BOLD : Typeface.NORMAL);
             itemRoot.setBackgroundColor(
                     isTop ? ContextCompat.getColor(RankingActivity.this, R.color.gold_transparent)
                             : android.graphics.Color.TRANSPARENT);

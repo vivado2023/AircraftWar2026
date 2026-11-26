@@ -9,6 +9,7 @@ import androidx.appcompat.app.AlertDialog;
 
 import com.example.aircraftwar.music.GameAudio;
 import com.example.aircraftwar.ranking.RankingService;
+import com.example.aircraftwar.ranking.ScoreRecord;
 
 import android.os.Bundle;
 
@@ -31,12 +32,13 @@ public class GameActivity extends AppCompatActivity {
     private boolean resumed;
     private boolean resultShown;
     private Integer finalScore;
+    private int difficulty = ScoreRecord.DIFFICULTY_EASY;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        int difficulty = getIntent().getIntExtra(EXTRA_DIFFICULTY, 0);
+        difficulty = getIntent().getIntExtra(EXTRA_DIFFICULTY, ScoreRecord.DIFFICULTY_EASY);
         BaseGame game;
         switch (difficulty) {
             case 1:
@@ -133,8 +135,10 @@ public class GameActivity extends AppCompatActivity {
                     if (name.isEmpty()) {
                         name = "Player";
                     }
-                    new RankingService(this).addScore(name, finalScore);
-                    startActivity(new Intent(this, RankingActivity.class));
+                    new RankingService(this).addScore(difficulty, name, finalScore);
+                    Intent intent = new Intent(this, RankingActivity.class);
+                    intent.putExtra(RankingActivity.EXTRA_DIFFICULTY, difficulty);
+                    startActivity(intent);
                     finish();
                 })
                 .setNegativeButton("取消", (dialog, which) -> finish())
