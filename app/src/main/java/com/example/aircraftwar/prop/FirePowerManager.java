@@ -20,10 +20,23 @@ import java.util.concurrent.TimeUnit;
  */
 public class FirePowerManager {
 
-    private static final ScheduledExecutorService executorService =
-            Executors.newSingleThreadScheduledExecutor();
+    private static ScheduledExecutorService executorService;
 
     private static ScheduledFuture<?> recoverTask;
+
+    /**
+     * 惰性获取线程池。
+     * <p>
+     * 上一局 Game Over 时 shutdown() 会关闭线程池，若直接复用已关闭的线程池
+     * schedule 会抛 RejectedExecutionException；这里检测到已关闭时重新创建，
+     * 保证“返回菜单再开一局”后火力道具仍然可用。
+     */
+    private static synchronized ScheduledExecutorService executor() {
+        if (executorService == null || executorService.isShutdown()) {
+            executorService = Executors.newSingleThreadScheduledExecutor();
+        }
+        return executorService;
+    }
 
     /**
      * 激活火力道具效果
@@ -47,7 +60,7 @@ public class FirePowerManager {
         }
 
         // 3. 开启新的延时恢复任务
-        recoverTask = executorService.schedule(new Runnable() {
+        recoverTask = executor().schedule(new Runnable() {
             @Override
             public void run() {
                 heroAircraft.resetShootStrategy();
@@ -61,7 +74,9 @@ public class FirePowerManager {
             recoverTask.cancel(false);
         }
 
-        executorService.shutdownNow();
+        if (executorService != null) {
+            executorService.shutdownNow();
+        }
     }
 
 
