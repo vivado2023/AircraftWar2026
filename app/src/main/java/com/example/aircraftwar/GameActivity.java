@@ -1,11 +1,14 @@
 package com.example.aircraftwar;
 
+import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.widget.EditText;
 
 import androidx.appcompat.app.AlertDialog;
 
 import com.example.aircraftwar.music.GameAudio;
+import com.example.aircraftwar.ranking.RankingService;
 
 import android.os.Bundle;
 
@@ -105,7 +108,36 @@ public class GameActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("游戏结束")
                 .setMessage("本局得分：" + finalScore)
-                .setPositiveButton("返回菜单", (dialog, which) -> finish())
+                .setPositiveButton("保存并查看排行", (dialog, which) -> showSaveScoreDialog())
+                .setNegativeButton("返回菜单", (dialog, which) -> finish())
+                .setCancelable(false)
+                .show();
+    }
+
+    /** 实验四：游戏结束输入玩家名，成绩存入排行榜（SQLite），并跳转排行榜页 */
+    private void showSaveScoreDialog() {
+        if (finalScore == null || isFinishing()) {
+            return;
+        }
+
+        EditText input = new EditText(this);
+        input.setHint("输入玩家姓名");
+        input.setText("Player");
+        input.setSelectAllOnFocus(true);
+
+        new AlertDialog.Builder(this)
+                .setTitle("保存成绩")
+                .setView(input)
+                .setPositiveButton("保存", (dialog, which) -> {
+                    String name = input.getText().toString().trim();
+                    if (name.isEmpty()) {
+                        name = "Player";
+                    }
+                    new RankingService(this).addScore(name, finalScore);
+                    startActivity(new Intent(this, RankingActivity.class));
+                    finish();
+                })
+                .setNegativeButton("取消", (dialog, which) -> finish())
                 .setCancelable(false)
                 .show();
     }

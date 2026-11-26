@@ -20,6 +20,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btn_easy).setOnClickListener(view -> openGame(0));
         findViewById(R.id.btn_normal).setOnClickListener(view -> openGame(1));
         findViewById(R.id.btn_hard).setOnClickListener(view -> openGame(2));
+        findViewById(R.id.btn_rank).setOnClickListener(view ->
+                startActivity(new Intent(this, RankingActivity.class)));
     }
 
     private void openGame(int difficulty) {
