@@ -12,9 +12,9 @@ import android.content.Context;
  */
 public final class RankingDaoFactory {
 
-    /** 当前默认实现：文件存储（实验四第 1~3 步） */
+    /** 当前默认实现：SQLite 数据库存储（实验四第 4 步） */
     public static RankingDao create(Context context) {
-        return new RankingDaoFileImpl(context);
+        return new RankingDaoSqliteImpl(context);
     }
 
     /** 文件存储实现（实验四第 1~3 步使用，接口一致可直接替换） */
